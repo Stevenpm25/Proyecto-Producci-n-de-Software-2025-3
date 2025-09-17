@@ -5,6 +5,10 @@ from models.models_loans import Loan, LoanPublic, QueueItem, QueuePublic
 from models.models_works import Work
 from models.models_users import User
 from patterns.factory import PlanFactory
+from datetime import datetime
+from sqlmodel import select, func
+from models.models_users import User
+from patterns.factory import PlanFactory
 
 # --- Helpers ---
 async def _active_loans_count(session: AsyncSession, work_id: int) -> int:
@@ -31,7 +35,9 @@ async def list_loans(session: AsyncSession) -> List[LoanPublic]:
     return [LoanPublic.model_validate(l) for l in rs.scalars().all()]
 
 async def borrow_work(session: AsyncSession, user_id: int, work_id: int) -> Tuple[str, Optional[LoanPublic] | QueuePublic]:
-    # Reglas por plan (puedes extender con límites mensuales si quieres)
+    ok, reason = await _enforce_plan_limits(session, user_id)
+    if not ok:
+        return ("limit_reached", reason)
     PlanFactory.create("premium" if (await session.get(User, user_id)).role == "premium" else "free")
 
     # Si hay cupo, crear préstamo activo
@@ -78,3 +84,23 @@ async def list_queue(session: AsyncSession, work_id: int) -> List[QueuePublic]:
     rs = await session.execute(select(QueueItem).where(QueueItem.work_id == work_id)
                                .order_by(QueueItem.priority.asc(), QueueItem.created_at.asc()))
     return [QueuePublic.model_validate(q) for q in rs.scalars().all()]
+
+async def _user_active_concurrent_loans(session: AsyncSession, user_id: int) -> int:
+    stmt = select(func.count(Loan.id)).where(Loan.user_id == user_id, Loan.status == "active")
+    return (await session.execute(stmt)).scalar() or 0
+
+async def _user_loans_in_month(session: AsyncSession, user_id: int) -> int:
+    ym = datetime.utcnow().strftime("%Y-%m")
+    stmt = select(func.count(Loan.id)).where(Loan.user_id == user_id, Loan.start.like(f"{ym}%"))
+    return (await session.execute(stmt)).scalar() or 0
+
+async def _enforce_plan_limits(session: AsyncSession, user_id: int):
+    user = await session.get(User, user_id)
+    plan = PlanFactory.create("premium" if user and user.role == "premium" else "free")
+    used_month = await _user_loans_in_month(session, user_id)
+    if used_month >= plan.max_works_per_month:
+        return False, f"Monthly limit reached ({plan.max_works_per_month})"
+    conc = await _user_active_concurrent_loans(session, user_id)
+    if conc >= plan.max_concurrent:
+        return False, f"Concurrent limit reached ({plan.max_concurrent})"
+    return True, None

@@ -2,7 +2,7 @@ from typing import Optional
 from enum import Enum
 from sqlmodel import SQLModel, Field
 from models.models_common import Timestamped
-
+from sqlalchemy import UniqueConstraint
 class UserRole(str, Enum):
     FREE = "free"
     PREMIUM = "premium"
@@ -24,9 +24,9 @@ class UserCreate(UserBase):
     password: str = Field(min_length=6)
 
 class User(UserBase, Timestamped, table=True):
+    __table_args__ = (UniqueConstraint("email", name="uq_users_email"),)
     id: Optional[int] = Field(default=None, primary_key=True)
     pass_hash: str
-
 class UserPublic(SQLModel):
     id: int
     name: str
