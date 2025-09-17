@@ -15,3 +15,5 @@ DATABASE_URL = os.getenv(
 
 JWT_SECRET = os.getenv("JWT_SECRET", "change_me")
 JWT_ALG = "HS256"
+
+"lulu"
