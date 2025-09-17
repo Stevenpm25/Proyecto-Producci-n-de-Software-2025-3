@@ -1,0 +1,2 @@
+id,user_id,plan,status,cancel_at_period_end,period_start,period_end
+1,2,premium,active,False,2025-09-01,2025-10-01
