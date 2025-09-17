@@ -3,7 +3,6 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from db import SessionLocal
-from jose import JWTError
 from services.auth_service import decode_token
 from models.models_users import User
 
